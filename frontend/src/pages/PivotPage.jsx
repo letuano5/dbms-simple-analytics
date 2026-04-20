@@ -38,7 +38,10 @@ function PivotTable({ data, rowDim, colDim, metric, loading }) {
   const rowVals = [...new Set(data.map(d => d.row_val))].sort()
   const colVals = [...new Set(data.map(d => d.col_val))].sort()
   const lookup = {}
-  data.forEach(d => { lookup[`${d.row_val}||${d.col_val}`] = Number(d.value) })
+  data.forEach(d => {
+    const key = `${d.row_val}||${d.col_val}`
+    lookup[key] = (lookup[key] || 0) + Number(d.value)
+  })
 
   const rowTotals = {}
   rowVals.forEach(r => {
@@ -83,7 +86,7 @@ function PivotTable({ data, rowDim, colDim, metric, loading }) {
               {colVals.map(c => {
                 const val = lookup[`${r}||${c}`] || 0
                 const pct = colMaxes[c] > 0 ? val / colMaxes[c] : 0
-                const bg = val > 0 ? `rgba(59,130,246,${(0.06 + pct * 0.22).toFixed(2)})` : 'transparent'
+                const bg = val > 0 ? `rgba(59,130,246,${(0.08 + pct * 0.50).toFixed(2)})` : 'transparent'
                 return (
                   <td
                     key={c}

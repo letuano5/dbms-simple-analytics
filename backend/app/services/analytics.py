@@ -352,8 +352,8 @@ async def get_pivot_custom(
         .join(OrderDetail, OrderDetail.orderNumber == Order.orderNumber)
         .join(Customer, Customer.customerNumber == Order.customerNumber)
         .join(Product, Product.productCode == OrderDetail.productCode)
-        .group_by(row_expr, col_expr)
-        .order_by(row_expr, col_expr)
+        .group_by(text("row_val"), text("col_val"))
+        .order_by(text("row_val"), text("col_val"))
     )
     return (await db.execute(stmt)).mappings().all()
 
