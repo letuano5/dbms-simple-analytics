@@ -1,11 +1,18 @@
-from sqlalchemy import select, func, distinct, case, text, String
+from sqlalchemy import select, func, distinct, case, text, String, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import Customer, Order, OrderDetail, Product, ProductLine, Employee, Payment
 
 
 # ─── Customers ────────────────────────────────────────────────────────────────
 
-async def get_customers_list(db: AsyncSession, search: str, country: str, page: int, limit: int):
+async def get_customers_list(
+    db: AsyncSession,
+    search: str, country: str,
+    page: int, limit: int,
+    sort_by: str = "customerName", sort_dir: str = "asc",
+    credit_limit_min: float | None = None,
+    credit_limit_max: float | None = None,
+):
     revenue_sub = (
         select(
             Order.customerNumber,
@@ -37,11 +44,28 @@ async def get_customers_list(db: AsyncSession, search: str, country: str, page: 
         base = base.where(Customer.customerName.ilike(f"%{search}%"))
     if country:
         base = base.where(Customer.country == country)
+    if credit_limit_min is not None:
+        base = base.where(Customer.creditLimit >= credit_limit_min)
+    if credit_limit_max is not None:
+        base = base.where(Customer.creditLimit <= credit_limit_max)
+
+    _sort_cols = {
+        "customerNumber": Customer.customerNumber,
+        "customerName": Customer.customerName,
+        "country": Customer.country,
+        "city": Customer.city,
+        "creditLimit": Customer.creditLimit,
+        "totalRevenue": func.coalesce(revenue_sub.c.totalRevenue, 0),
+    }
+    sort_col = _sort_cols.get(sort_by, Customer.customerName)
+    order_expr = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
 
     count_q = select(func.count()).select_from(base.subquery())
     total = (await db.execute(count_q)).scalar_one()
 
-    rows = (await db.execute(base.offset((page - 1) * limit).limit(limit))).mappings().all()
+    rows = (
+        await db.execute(base.order_by(order_expr).offset((page - 1) * limit).limit(limit))
+    ).mappings().all()
     return total, list(rows)
 
 
@@ -74,7 +98,11 @@ async def get_customers_by_country(db: AsyncSession):
 # ─── Orders ───────────────────────────────────────────────────────────────────
 
 async def get_orders_list(
-    db: AsyncSession, status: str, from_date: str, to_date: str, page: int, limit: int
+    db: AsyncSession,
+    status: str, from_date: str, to_date: str,
+    page: int, limit: int,
+    customer_search: str = "",
+    sort_by: str = "orderDate", sort_dir: str = "desc",
 ):
     base = (
         select(
@@ -96,12 +124,25 @@ async def get_orders_list(
         base = base.where(Order.orderDate >= from_date)
     if to_date:
         base = base.where(Order.orderDate <= to_date)
+    if customer_search:
+        base = base.where(Customer.customerName.ilike(f"%{customer_search}%"))
+
+    _sort_cols = {
+        "orderNumber": Order.orderNumber,
+        "customerName": Customer.customerName,
+        "orderDate": Order.orderDate,
+        "requiredDate": Order.requiredDate,
+        "shippedDate": Order.shippedDate,
+        "status": Order.status,
+    }
+    sort_col = _sort_cols.get(sort_by, Order.orderDate)
+    order_expr = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
 
     count_q = select(func.count()).select_from(base.subquery())
     total = (await db.execute(count_q)).scalar_one()
 
     rows = (
-        await db.execute(base.order_by(Order.orderDate.desc()).offset((page - 1) * limit).limit(limit))
+        await db.execute(base.order_by(order_expr).offset((page - 1) * limit).limit(limit))
     ).mappings().all()
     return total, list(rows)
 
@@ -189,7 +230,14 @@ async def get_sales_rep_performance(db: AsyncSession):
 
 # ─── Products ─────────────────────────────────────────────────────────────────
 
-async def get_products_list(db: AsyncSession, search: str, product_line: str, page: int, limit: int):
+async def get_products_list(
+    db: AsyncSession,
+    search: str, product_line: str,
+    page: int, limit: int,
+    sort_by: str = "productName", sort_dir: str = "asc",
+    qty_min: int | None = None, qty_max: int | None = None,
+    price_min: float | None = None, price_max: float | None = None,
+):
     base = select(
         Product.productCode,
         Product.productName,
@@ -204,11 +252,30 @@ async def get_products_list(db: AsyncSession, search: str, product_line: str, pa
         base = base.where(Product.productName.ilike(f"%{search}%"))
     if product_line:
         base = base.where(Product.productLine == product_line)
+    if qty_min is not None:
+        base = base.where(Product.quantityInStock >= qty_min)
+    if qty_max is not None:
+        base = base.where(Product.quantityInStock <= qty_max)
+    if price_min is not None:
+        base = base.where(Product.buyPrice >= price_min)
+    if price_max is not None:
+        base = base.where(Product.buyPrice <= price_max)
+
+    _sort_cols = {
+        "productCode": Product.productCode,
+        "productName": Product.productName,
+        "productLine": Product.productLine,
+        "quantityInStock": Product.quantityInStock,
+        "buyPrice": Product.buyPrice,
+        "MSRP": Product.MSRP,
+    }
+    sort_col = _sort_cols.get(sort_by, Product.productName)
+    order_expr = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
 
     count_q = select(func.count()).select_from(base.subquery())
     total = (await db.execute(count_q)).scalar_one()
 
-    rows = (await db.execute(base.offset((page - 1) * limit).limit(limit))).mappings().all()
+    rows = (await db.execute(base.order_by(order_expr).offset((page - 1) * limit).limit(limit))).mappings().all()
     return total, list(rows)
 
 

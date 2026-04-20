@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { ordersApi } from '../services/api'
 import { LineChart, PieChart } from '../components/charts/BaseChart'
 import DataTable from '../components/tables/DataTable'
 import GranularityToggle from '../components/GranularityToggle'
 import PageHeader from '../components/layout/PageHeader'
+import { Search } from 'lucide-react'
 
 const STATUS_COLORS = {
   Shipped: '#10b981', Resolved: '#3b82f6', Cancelled: '#ef4444',
@@ -15,9 +16,12 @@ const STATUS_OPTIONS = ['', 'Shipped', 'Resolved', 'Cancelled', 'On Hold', 'Disp
 
 export default function OrdersPage() {
   const [granularity, setGranularity] = useState('month')
+  const [customerSearch, setCustomerSearch] = useState('')
   const [status, setStatus] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [sortBy, setSortBy] = useState('orderDate')
+  const [sortDir, setSortDir] = useState('desc')
   const [page, setPage] = useState(1)
 
   const { data: overTime } = useQuery({
@@ -29,9 +33,25 @@ export default function OrdersPage() {
     queryFn: () => ordersApi.statusDistribution().then(r => r.data),
   })
   const { data: list, isLoading } = useQuery({
-    queryKey: ['orders-list', status, fromDate, toDate, page],
-    queryFn: () => ordersApi.list({ status, from_date: fromDate, to_date: toDate, page, limit: 15 }).then(r => r.data),
+    queryKey: ['orders-list', customerSearch, status, fromDate, toDate, sortBy, sortDir, page],
+    queryFn: () => ordersApi.list({
+      customer_search: customerSearch,
+      status, from_date: fromDate, to_date: toDate,
+      page, limit: 15,
+      sort_by: sortBy, sort_dir: sortDir,
+    }).then(r => r.data),
+    placeholderData: keepPreviousData,
   })
+
+  function handleSort(key, dir) {
+    setSortBy(key)
+    setSortDir(dir)
+    setPage(1)
+  }
+
+  function reset(setter) {
+    return (e) => { setter(e.target.value); setPage(1) }
+  }
 
   const columns = [
     { key: 'orderNumber', label: '#' },
@@ -72,15 +92,49 @@ export default function OrdersPage() {
       </div>
 
       <div className="card">
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <select className="input" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}>
-            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s || 'Tất cả trạng thái'}</option>)}
-          </select>
-          <input type="date" className="input" value={fromDate} onChange={e => { setFromDate(e.target.value); setPage(1) }} />
-          <span className="text-gray-400 text-sm">→</span>
-          <input type="date" className="input" value={toDate} onChange={e => { setToDate(e.target.value); setPage(1) }} />
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Tìm khách hàng</label>
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="input pl-8 w-44"
+                placeholder="Tên khách hàng..."
+                value={customerSearch}
+                onChange={reset(setCustomerSearch)}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Trạng thái</label>
+            <select className="input w-40" value={status} onChange={reset(setStatus)}>
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s || 'Tất cả'}</option>)}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Ngày đặt</label>
+            <div className="flex items-center gap-1.5">
+              <input type="date" className="input" value={fromDate} onChange={reset(setFromDate)} />
+              <span className="text-gray-400 text-sm">→</span>
+              <input type="date" className="input" value={toDate} onChange={reset(setToDate)} />
+            </div>
+          </div>
         </div>
-        <DataTable columns={columns} data={list?.data ?? []} total={list?.total ?? 0} page={page} limit={15} onPageChange={setPage} loading={isLoading} />
+
+        <DataTable
+          columns={columns}
+          data={list?.data ?? []}
+          total={list?.total ?? 0}
+          page={page}
+          limit={15}
+          onPageChange={setPage}
+          loading={isLoading}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSort={handleSort}
+        />
       </div>
     </div>
   )

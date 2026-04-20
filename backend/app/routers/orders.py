@@ -26,9 +26,16 @@ async def list_orders(
     status: str = Query(""),
     from_date: str = Query(""),
     to_date: str = Query(""),
+    customer_search: str = Query(""),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("orderDate"),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     db: AsyncSession = Depends(get_db),
 ):
-    total, data = await svc.get_orders_list(db, status, from_date, to_date, page, limit)
+    total, data = await svc.get_orders_list(
+        db, status, from_date, to_date, page, limit,
+        customer_search=customer_search,
+        sort_by=sort_by, sort_dir=sort_dir,
+    )
     return {"total": total, "page": page, "limit": limit, "data": [dict(r) for r in data]}
