@@ -31,6 +31,7 @@ export const productsApi = {
 }
 
 export const pivotApi = {
+  custom: (params) => api.get('/pivot/custom', { params }),
   productLineByMonth: () => api.get('/pivot/productline-by-month'),
   countryByProductLine: () => api.get('/pivot/country-by-productline'),
 }

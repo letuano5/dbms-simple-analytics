@@ -314,6 +314,50 @@ async def get_stock_levels(db: AsyncSession):
 
 # ─── Pivot ────────────────────────────────────────────────────────────────────
 
+_PIVOT_DIMS = {
+    "country": lambda: func.coalesce(Customer.country, "—"),
+    "productLine": lambda: Product.productLine,
+    "year": lambda: func.cast(func.year(Order.orderDate), String),
+    "month": lambda: func.date_format(Order.orderDate, "%Y-%m"),
+    "status": lambda: Order.status,
+}
+
+_PIVOT_METRICS = {
+    "revenue": lambda: func.sum(OrderDetail.quantityOrdered * OrderDetail.priceEach),
+    "quantity": lambda: func.sum(OrderDetail.quantityOrdered),
+    "orders": lambda: func.count(func.distinct(Order.orderNumber)),
+}
+
+
+async def get_pivot_custom(
+    db: AsyncSession,
+    row_dim: str,
+    col_dim: str,
+    value_metric: str,
+):
+    if row_dim not in _PIVOT_DIMS or col_dim not in _PIVOT_DIMS or value_metric not in _PIVOT_METRICS:
+        return []
+
+    row_expr = _PIVOT_DIMS[row_dim]()
+    col_expr = _PIVOT_DIMS[col_dim]()
+    val_expr = _PIVOT_METRICS[value_metric]()
+
+    stmt = (
+        select(
+            row_expr.label("row_val"),
+            col_expr.label("col_val"),
+            val_expr.label("value"),
+        )
+        .select_from(Order)
+        .join(OrderDetail, OrderDetail.orderNumber == Order.orderNumber)
+        .join(Customer, Customer.customerNumber == Order.customerNumber)
+        .join(Product, Product.productCode == OrderDetail.productCode)
+        .group_by(row_expr, col_expr)
+        .order_by(row_expr, col_expr)
+    )
+    return (await db.execute(stmt)).mappings().all()
+
+
 async def get_pivot_productline_by_month(db: AsyncSession):
     stmt = (
         select(
